@@ -63,20 +63,26 @@ function prettyResult(ch: Chess): string {
 }
 
 export default function ChessPuzzle(props: Partial<PuzzleConfig>): JSX.Element {
-  const cfg: PuzzleConfig = { ...DEFAULT_PUZZLE, ...props } as PuzzleConfig;
+  const initialCfg: PuzzleConfig = { ...DEFAULT_PUZZLE, ...props } as PuzzleConfig;
 
-  const [fen, setFen] = useState<string>(cfg.fen);
-  const [orientation] = useState<"white" | "black">(cfg.orientation || (cfg.fen.includes(" w ") ? "white" : "black"));
+  // Keep the active puzzle (FEN + solution + labels) in state so the loader can truly update it.
+  const [puzzle, setPuzzle] = useState<PuzzleConfig>(initialCfg);
+
+  const [fen, setFen] = useState<string>(initialCfg.fen);
+  const [orientation] = useState<"white" | "black">(initialCfg.orientation || (initialCfg.fen.includes(" w ") ? "white" : "black"));
   const [ply, setPly] = useState<number>(0);
   const [wrong, setWrong] = useState<boolean>(false);
   const [arrows, setArrows] = useState<[Square, Square][]>([]);
   const [solved, setSolved] = useState<boolean>(false);
   const [coach, setCoach] = useState<CoachItem[]>([]);
 
-  const expectedSequence: string[] = useMemo(() => toSanSequence(cfg.fen, cfg.solution), [cfg.fen, cfg.solution]);
+  const expectedSequence: string[] = useMemo(
+    () => toSanSequence(puzzle.fen, puzzle.solution),
+    [puzzle.fen, puzzle.solution]
+  );
 
   const reset = () => {
-    setFen(cfg.fen);
+    setFen(puzzle.fen);
     setPly(0);
     setWrong(false);
     setArrows([]);
@@ -105,7 +111,7 @@ export default function ChessPuzzle(props: Partial<PuzzleConfig>): JSX.Element {
       if (!mv) return;
       setFen(ch.fen());
       setPly(ply + 1);
-      setCoach((c) => [...c, { ok: true, text: cfg.coachNotes?.[ply] || mv.san }]);
+      setCoach((c) => [...c, { ok: true, text: puzzle.coachNotes?.[ply] || mv.san }]);
       if (ply + 1 === expectedSequence.length) setSolved(true);
     } catch { /* ignore */ }
   };
@@ -138,7 +144,7 @@ export default function ChessPuzzle(props: Partial<PuzzleConfig>): JSX.Element {
 
     setFen(ch.fen());
     setPly(ply + 1);
-    setCoach((c) => [...c, { ok: true, text: cfg.coachNotes?.[ply] || playedSan }]);
+    setCoach((c) => [...c, { ok: true, text: puzzle.coachNotes?.[ply] || playedSan }]);
     setArrows([]);
 
     if (ply + 1 === expectedSequence.length) setSolved(true);
@@ -156,8 +162,8 @@ export default function ChessPuzzle(props: Partial<PuzzleConfig>): JSX.Element {
         className="mx-auto"
       >
         <div className="mb-3">
-          <div className="text-sm uppercase tracking-wider text-neutral-400">{cfg.subtitle}</div>
-          <h1 className="text-2xl font-semibold">{cfg.title}</h1>
+          <div className="text-sm uppercase tracking-wider text-neutral-400">{puzzle.subtitle}</div>
+          <h1 className="text-2xl font-semibold">{puzzle.title}</h1>
         </div>
 
         <div className="rounded-2xl overflow-hidden shadow-2xl ring-1 ring-neutral-800">
@@ -208,7 +214,7 @@ export default function ChessPuzzle(props: Partial<PuzzleConfig>): JSX.Element {
               <div className={`w-6 h-6 rounded-full grid place-items-center text-xs ${i < ply ? "bg-emerald-500/20 text-emerald-300" : "bg-neutral-700 text-neutral-300"}`}>
                 {i + 1}
               </div>
-              <div className="flex-1 text-sm">{cfg.coachNotes?.[i] || label}</div>
+              <div className="flex-1 text-sm">{puzzle.coachNotes?.[i] || label}</div>
               {i < ply && <CheckCircle2 size={16} className="text-emerald-400"/>}
             </div>
           ))}
@@ -224,6 +230,7 @@ export default function ChessPuzzle(props: Partial<PuzzleConfig>): JSX.Element {
           onLoad={(p) => {
             try {
               new Chess(p.fen); // validate FEN
+              setPuzzle((prev) => ({ ...prev, fen: p.fen }));
               setFen(p.fen);
               setPly(0);
               setSolved(false);
@@ -233,8 +240,13 @@ export default function ChessPuzzle(props: Partial<PuzzleConfig>): JSX.Element {
           }}
           onLoadSolution={(seq) => {
             try {
-              toSanSequence(fen, seq); // validate
-              (cfg as any).solution = seq;
+              toSanSequence(puzzle.fen, seq); // validate against puzzle FEN
+              setPuzzle((prev) => ({ ...prev, solution: seq }));
+              setPly(0);
+              setSolved(false);
+              setWrong(false);
+              setCoach([]);
+              setArrows([]);
             } catch (e) { alert("Invalid solution list (use SAN like Qg7# or UCI like f7g7)"); }
           }}
         />
